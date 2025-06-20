@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>트위스트 사다리 게임</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* 사용자 정의 스타일 및 애니메이션 */
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        .shake {
+            animation: screen-shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
+            transform: translate3d(0, 0, 0);
+        }
+
+        @keyframes screen-shake {
+
+            10%,
+            90% {
+                transform: translate3d(-1px, 0, 0);
+            }
+
+            20%,
+            80% {
+                transform: translate3d(2px, 0, 0);
+            }
+
+            30%,
+            50%,
+            70% {
+                transform: translate3d(-4px, 0, 0);
+            }
+
+            40%,
+            60% {
+                transform: translate3d(4px, 0, 0);
+            }
+        }
+
+        .dice {
+            width: 100px;
+            height: 100px;
+            transform-style: preserve-3d;
+            transition: transform 1.5s cubic-bezier(0.45, 0.05, 0.55, 0.95);
+        }
+
+        .dice-face {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border: 2px solid #333;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #333;
+            backface-visibility: hidden;
+            border-radius: 12px;
+        }
+
+        /* 주사위 면 위치 설정 */
+        .face-1 {
+            transform: rotateY(0deg) translateZ(50px);
+        }
+
+        .face-2 {
+            transform: rotateY(90deg) translateZ(50px);
+        }
+
+        .face-3 {
+            transform: rotateY(180deg) translateZ(50px);
+        }
+
+        .face-4 {
+            transform: rotateY(-90deg) translateZ(50px);
+        }
+
+        .face-5 {
+            transform: rotateX(90deg) translateZ(50px);
+        }
+
+        .face-6 {
+            transform: rotateX(-90deg) translateZ(50px);
+        }
+
+        .modal-content {
+            transform: scale(0.95);
+            opacity: 0;
+            transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+        }
+
+        .modal-visible .modal-content {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        /* 위치 이동 애니메이션을 위한 스타일 */
+        .label-item {
+            transition: left 0.6s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full max-w-4xl mx-auto p-4 md:p-6">
+
+        <!-- 설정 화면 -->
+        <div id="setup-screen" class="bg-white p-6 md:p-8 rounded-2xl shadow-xl transition-opacity duration-500">
+            <h1 class="text-3xl md:text-4xl font-bold text-center mb-6">🎲 트위스트 사다리 게임</h1>
+            <div class="mb-6">
+                <label for="player-count" class="block text-lg font-medium mb-2 text-center">참가 인원을 선택하세요</label>
+                <div id="player-count-selector" class="flex justify-center space-x-2">
+                    <!-- 인원 선택 버튼이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+
+            <div id="inputs-container" class="space-y-4 mb-6">
+                <!-- 이름 및 결과 입력 필드가 여기에 동적으로 추가됩니다 -->
+            </div>
+
+            <button id="start-game-btn"
+                class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors duration-300 text-xl disabled:bg-gray-400"
+                disabled>
+                게임 시작!
+            </button>
+        </div>
+
+        <!-- 게임 화면 -->
+        <div id="game-screen" class="hidden">
+            <div id="players-display" class="relative h-10 mb-2"></div>
+            <canvas id="ladder-canvas" class="w-full bg-white rounded-lg shadow-md"></canvas>
+            <div id="outcomes-display" class="relative h-10 mt-2"></div>
+        </div>
+
+        <!-- 주사위 이벤트 모달 -->
+        <div id="dice-modal"
+            class="hidden fixed inset-0 bg-black bg-opacity-60 flex-col items-center justify-center z-50">
+            <div class="perspective-container" style="perspective: 800px;">
+                <div id="dice" class="dice">
+                    <div class="dice-face face-1">1</div>
+                    <div class="dice-face face-2">2</div>
+                    <div class="dice-face face-3">3</div>
+                    <div class="dice-face face-4">4</div>
+                    <div class="dice-face face-5">5</div>
+                    <div class="dice-face face-6">6</div>
+                </div>
+            </div>
+            <p id="dice-event-text" class="mt-8 text-white text-2xl font-bold text-center"></p>
+        </div>
+
+        <!-- 최종 결과 모달 -->
+        <div id="result-modal"
+            class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div class="modal-content bg-white p-6 md:p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+                <h2 class="text-3xl font-bold mb-6">🎉 최종 결과 🎉</h2>
+                <div id="result-list" class="space-y-3 mb-8">
+                    <!-- 결과가 여기에 동적으로 표시됩니다. -->
+                </div>
+                <div class="flex space-x-4">
+                    <button id="save-result-btn"
+                        class="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors duration-300 text-xl">결과
+                        저장</button>
+                    <button id="restart-from-modal-btn"
+                        class="w-full bg-green-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-600 transition-colors duration-300 text-xl">다시
+                        하기</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 빈 값 확인 모달 -->
+        <div id="confirmation-modal"
+            class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div class="modal-content bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center">
+                <h2 class="text-2xl font-bold mb-4">이대로 시작할까요?</h2>
+                <p class="text-gray-600 mb-6">이름과 결과가 빈칸이면<br />재미있는 별명으로 시작됩니다.</p>
+                <div class="flex justify-center space-x-4">
+                    <button id="cancel-start-btn"
+                        class="w-full bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors">아니요</button>
+                    <button id="confirm-start-btn"
+                        class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">네,
+                        시작!</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 전역 변수 및 상수 ---
+        const setupScreen = document.getElementById('setup-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const playerCountSelector = document.getElementById('player-count-selector');
+        const inputsContainer = document.getElementById('inputs-container');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const canvas = document.getElementById('ladder-canvas');
+        const ctx = canvas.getContext('2d');
+        const playersDisplay = document.getElementById('players-display');
+        const outcomesDisplay = document.getElementById('outcomes-display');
+        const appContainer = document.getElementById('app-container');
+
+        const diceModal = document.getElementById('dice-modal');
+        const diceElement = document.getElementById('dice');
+        const diceEventText = document.getElementById('dice-event-text');
+        const resultModal = document.getElementById('result-modal');
+        const resultList = document.getElementById('result-list');
+        const restartFromModalBtn = document.getElementById('restart-from-modal-btn');
+        const saveResultBtn = document.getElementById('save-result-btn');
+        const confirmationModal = document.getElementById('confirmation-modal');
+        const confirmStartBtn = document.getElementById('confirm-start-btn');
+        const cancelStartBtn = document.getElementById('cancel-start-btn');
+
+        const MIN_PLAYERS = 2;
+        const MAX_PLAYERS = 6;
+        const LADDER_COLORS = ['#E53935', '#1E88E5', '#43A047', '#FDD835', '#8E24AA', '#FB8C00'];
+        const ANIMATION_DURATION = 5000;
+
+        const defaultPlayers = ["탐조가", "쩝쩝박사", "만물박사", "파티플래너", "소설가", "애쓰는약골"];
+        const defaultOutcomes = ["휴가 1일", "10만원", "펍키 식사권", "카페 음료권", "크래프톤웨이", "꽝"];
+
+        let playerCount = 0;
+        let players = [];
+        let outcomes = [];
+        let ladder = { verticals: [], rungs: [] };
+        let paths = [];
+        let highlightedRungs = [];
+        let animationFrameId;
+        let animationStartTime;
+        let isPaused = false;
+        let pauseTime = 0;
+        let diceEventTriggered = false;
+
+        // --- 초기화 및 이벤트 리스너 ---
+        function init() {
+            createPlayerCountButtons();
+            playerCountSelector.addEventListener('click', handlePlayerCountSelect);
+            startGameBtn.addEventListener('click', () => startGame(false));
+            restartFromModalBtn.addEventListener('click', restartGame);
+            saveResultBtn.addEventListener('click', saveResultsToClipboard);
+            confirmStartBtn.addEventListener('click', () => startGame(true));
+            cancelStartBtn.addEventListener('click', () => {
+                confirmationModal.classList.add('hidden');
+                confirmationModal.classList.remove('modal-visible');
+            });
+            window.addEventListener('resize', () => {
+                if (!gameScreen.classList.contains('hidden')) {
+                    resizeCanvas();
+                    generateLadder();
+                    displayPlayersAndOutcomes(true);
+                    if (animationFrameId) {
+                        drawFrame(pauseTime / ANIMATION_DURATION);
+                    } else {
+                        calculateAllPaths();
+                        drawFullLadder();
+                    }
+                }
+            });
+        }
+
+        // --- UI 생성 및 관리 ---
+        function createPlayerCountButtons() {
+            for (let i = MIN_PLAYERS; i <= MAX_PLAYERS; i++) {
+                const button = document.createElement('button');
+                button.textContent = `${i}명`;
+                button.dataset.count = i;
+                button.className = 'px-4 py-2 rounded-lg border-2 border-gray-300 transition-colors duration-200 hover:bg-gray-200';
+                playerCountSelector.appendChild(button);
+            }
+        }
+
+        function handlePlayerCountSelect(e) {
+            if (e.target.tagName !== 'BUTTON') return;
+            playerCount = parseInt(e.target.dataset.count);
+            Array.from(playerCountSelector.children).forEach(btn => {
+                btn.classList.remove('bg-indigo-500', 'text-white', 'border-indigo-500');
+                if (parseInt(btn.dataset.count) === playerCount) {
+                    btn.classList.add('bg-indigo-500', 'text-white', 'border-indigo-500');
+                }
+            });
+            createInputs(playerCount);
+            startGameBtn.disabled = false;
+        }
+
+        function createInputs(count) {
+            inputsContainer.innerHTML = '';
+            const container = document.createElement('div');
+            container.className = 'grid grid-cols-2 gap-4';
+            const namesDiv = document.createElement('div');
+            const outcomesDiv = document.createElement('div');
+            namesDiv.innerHTML = '<h3 class="text-lg font-semibold mb-2 text-center">이름</h3>';
+            outcomesDiv.innerHTML = '<h3 class="text-lg font-semibold mb-2 text-center">결과</h3>';
+            for (let i = 0; i < count; i++) {
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.placeholder = defaultPlayers[i % defaultPlayers.length];
+                nameInput.className = 'player-name w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-400 outline-none mb-2';
+                namesDiv.appendChild(nameInput);
+                const outcomeInput = document.createElement('input');
+                outcomeInput.type = 'text';
+                outcomeInput.placeholder = defaultOutcomes[i % defaultOutcomes.length];
+                outcomeInput.className = 'outcome-value w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-400 outline-none mb-2';
+                outcomesDiv.appendChild(outcomeInput);
+            }
+            container.appendChild(namesDiv);
+            container.appendChild(outcomesDiv);
+            inputsContainer.appendChild(container);
+        }
+
+        function displayPlayersAndOutcomes(isUpdate = false) {
+            const colWidth = canvas.width / playerCount;
+
+            if (!isUpdate) {
+                playersDisplay.innerHTML = '';
+                outcomesDisplay.innerHTML = '';
+                players.forEach((player) => {
+                    const playerEl = document.createElement('div');
+                    playerEl.dataset.id = player.id;
+                    playerEl.className = 'label-item absolute text-center font-bold text-sm md:text-base break-words p-1';
+                    playersDisplay.appendChild(playerEl);
+                });
+                outcomes.forEach((outcome) => {
+                    const outcomeEl = document.createElement('div');
+                    outcomeEl.dataset.id = outcome.id;
+                    outcomeEl.className = 'label-item absolute text-center font-bold text-sm md:text-base break-words p-1';
+                    outcomesDisplay.appendChild(outcomeEl);
+                });
+            }
+
+            players.forEach((player, i) => {
+                const playerEl = playersDisplay.querySelector(`[data-id="${player.id}"]`);
+                if (playerEl) {
+                    playerEl.textContent = player.name;
+                    playerEl.style.color = player.color;
+                    playerEl.style.width = `${colWidth}px`;
+                    playerEl.style.left = `${ladder.verticals[i]}px`;
+                    playerEl.style.transform = 'translateX(-50%)';
+                }
+            });
+            outcomes.forEach((outcome, i) => {
+                const outcomeEl = outcomesDisplay.querySelector(`[data-id="${outcome.id}"]`);
+                if (outcomeEl) {
+                    outcomeEl.textContent = outcome.text;
+                    outcomeEl.style.width = `${colWidth}px`;
+                    outcomeEl.style.left = `${ladder.verticals[i]}px`;
+                    outcomeEl.style.transform = 'translateX(-50%)';
+                }
+            });
+        }
+
+        // --- 게임 로직 ---
+        function startGame(forceStart = false) {
+            const nameInputs = Array.from(document.querySelectorAll('.player-name'));
+            const outcomeInputs = Array.from(document.querySelectorAll('.outcome-value'));
+            const areInputsEmpty = nameInputs.some(input => input.value.trim() === '') || outcomeInputs.some(input => input.value.trim() === '');
+
+            if (areInputsEmpty && !forceStart) {
+                confirmationModal.classList.remove('hidden');
+                setTimeout(() => confirmationModal.classList.add('modal-visible'), 10);
+                return;
+            }
+
+            confirmationModal.classList.add('hidden');
+            confirmationModal.classList.remove('modal-visible');
+
+            players = nameInputs.map((input, i) => ({
+                id: `p${i}`,
+                name: input.value.trim() || defaultPlayers[i % defaultPlayers.length],
+                color: LADDER_COLORS[i],
+            }));
+            outcomes = outcomeInputs.map((input, i) => ({
+                id: `o${i}`,
+                text: input.value.trim() || defaultOutcomes[i % defaultOutcomes.length]
+            }));
+
+            setupScreen.classList.add('opacity-0');
+            setTimeout(() => {
+                setupScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+                gameScreen.classList.add('opacity-100');
+                runGame();
+            }, 500);
+        }
+
+        function runGame() {
+            resizeCanvas();
+            generateLadder();
+            displayPlayersAndOutcomes(false);
+            calculateAllPaths();
+            startAnimation();
+        }
+
+        function resizeCanvas() {
+            const containerWidth = canvas.parentElement.clientWidth;
+            canvas.width = containerWidth;
+            canvas.height = window.innerHeight * 0.55;
+        }
+
+        function generateLadder() {
+            ladder.rungs = [];
+            const colWidth = canvas.width / playerCount;
+            ladder.verticals = Array.from({ length: playerCount }, (_, i) => colWidth * i + colWidth / 2);
+            const numRungs = playerCount * 5;
+            for (let i = 0; i < numRungs; i++) {
+                let startCol = Math.floor(Math.random() * (playerCount - 1));
+                let y = (canvas.height * 0.1) + (Math.random() * canvas.height * 0.8);
+                let isOverlapping = ladder.rungs.some(rung => rung.startCol === startCol && Math.abs(rung.y - y) < 25);
+                if (!isOverlapping) {
+                    const yOffset = (Math.random() - 0.5) * 40;
+                    ladder.rungs.push({ startCol, y, yOffset });
+                }
+            }
+        }
+
+        function calculateAllPaths() {
+            let playerPositions = Array.from({ length: playerCount }, (_, i) => i);
+
+            let tempPaths = Array.from({ length: playerCount }, (_, i) => {
+                return [{ x: ladder.verticals[i], y: 0 }];
+            });
+
+            const sortedRungs = [...ladder.rungs].sort((a, b) => a.y - b.y);
+
+            sortedRungs.forEach(rung => {
+                const col1 = rung.startCol;
+                const col2 = col1 + 1;
+
+                const player1_index = playerPositions[col1];
+                const player2_index = playerPositions[col2];
+
+                tempPaths[player1_index].push({ x: ladder.verticals[col1], y: rung.y });
+                tempPaths[player2_index].push({ x: ladder.verticals[col2], y: rung.y + rung.yOffset });
+
+                tempPaths[player1_index].push({ x: ladder.verticals[col2], y: rung.y + rung.yOffset });
+                tempPaths[player2_index].push({ x: ladder.verticals[col1], y: rung.y });
+
+                [playerPositions[col1], playerPositions[col2]] = [playerPositions[col2], playerPositions[col1]];
+            });
+
+            for (let i = 0; i < playerCount; i++) {
+                const final_player_index = playerPositions[i];
+                const lastPoint = tempPaths[final_player_index][tempPaths[final_player_index].length - 1];
+                if (lastPoint.y < canvas.height) {
+                    tempPaths[final_player_index].push({ x: ladder.verticals[i], y: canvas.height });
+                }
+            }
+
+            paths = tempPaths;
+        }
+
+        function shuffle(array) {
+            let currentIndex = array.length;
+            while (currentIndex != 0) {
+                let randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        // --- 애니메이션 및 그리기 ---
+        function startAnimation() {
+            animationStartTime = Date.now() - pauseTime;
+            diceEventTriggered = false;
+            isPaused = false;
+            animate();
+        }
+
+        function resumeAnimation() {
+            isPaused = false;
+            animationStartTime = Date.now() - pauseTime;
+            animate();
+        }
+
+        function animate() {
+            if (isPaused) return;
+            const elapsedTime = Date.now() - animationStartTime;
+            let progress = elapsedTime / ANIMATION_DURATION;
+            if (progress >= 0.5 && !diceEventTriggered) {
+                diceEventTriggered = true;
+                pauseTime = Date.now() - animationStartTime;
+                cancelAnimationFrame(animationFrameId);
+                triggerDiceEvent();
+                return;
+            }
+            if (progress >= 1) progress = 1;
+            drawFrame(progress);
+            if (progress < 1) {
+                animationFrameId = requestAnimationFrame(animate);
+            } else {
+                finishAnimation();
+            }
+        }
+
+        function drawFrame(progress) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawLadderBase();
+            paths.forEach((path, i) => {
+                ctx.strokeStyle = players[i].color;
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(path[0].x, path[0].y);
+                let totalPathLength = 0;
+                for (let j = 1; j < path.length; j++) totalPathLength += Math.hypot(path[j].x - path[j - 1].x, path[j].y - path[j - 1].y);
+                const currentPathLength = totalPathLength * progress;
+                let drawnLength = 0;
+                for (let j = 1; j < path.length; j++) {
+                    const p1 = path[j - 1];
+                    const p2 = path[j];
+                    const segmentLength = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                    if (drawnLength + segmentLength >= currentPathLength) {
+                        const ratio = (currentPathLength - drawnLength) / segmentLength;
+                        ctx.lineTo(p1.x + (p2.x - p1.x) * ratio, p1.y + (p2.y - p1.y) * ratio);
+                        break;
+                    } else {
+                        ctx.lineTo(p2.x, p2.y);
+                        drawnLength += segmentLength;
+                    }
+                }
+                ctx.stroke();
+            });
+        }
+
+        function drawLadderBase() {
+            ctx.strokeStyle = '#BDBDBD';
+            ctx.lineWidth = 3;
+            ladder.verticals.forEach(x => {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            });
+            ladder.rungs.forEach(rung => {
+                const x1 = ladder.verticals[rung.startCol];
+                const x2 = ladder.verticals[rung.startCol + 1];
+                ctx.beginPath();
+                ctx.moveTo(x1, rung.y);
+                ctx.lineTo(x2, rung.y + rung.yOffset);
+                ctx.stroke();
+            });
+
+            const now = Date.now();
+            highlightedRungs.forEach(hr => {
+                const elapsed = now - hr.timestamp;
+                if (elapsed < 1000) {
+                    const alpha = 1.0 - (elapsed / 1000);
+                    ctx.globalAlpha = alpha;
+                    ctx.strokeStyle = hr.type === 'add' ? '#22C55E' : '#EF4444';
+                    ctx.lineWidth = 6;
+                    const x1 = ladder.verticals[hr.startCol];
+                    const x2 = ladder.verticals[hr.startCol + 1];
+                    ctx.beginPath();
+                    ctx.moveTo(x1, hr.y);
+                    ctx.lineTo(x2, hr.y + hr.yOffset);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+                }
+            });
+            highlightedRungs = highlightedRungs.filter(hr => (now - hr.timestamp) < 1000);
+        }
+
+        function drawFullLadder() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawLadderBase();
+            paths.forEach((path, i) => {
+                ctx.strokeStyle = players[i].color;
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                path.forEach((point, j) => j === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y));
+                ctx.stroke();
+            });
+        }
+
+        function finishAnimation() {
+            animationFrameId = null;
+            drawFullLadder();
+            displayFinalResults();
+        }
+
+        // --- 결과 및 이벤트 처리 ---
+        function displayFinalResults() {
+            resultList.innerHTML = '';
+
+            paths.forEach((path, playerIndex) => {
+                const lastPoint = path[path.length - 1];
+                const outcomeIndex = ladder.verticals.findIndex(v => Math.abs(v - lastPoint.x) < 0.1);
+
+                const resultEl = document.createElement('div');
+                resultEl.className = 'flex items-center justify-between text-lg p-2 rounded-lg bg-gray-50';
+                resultEl.innerHTML = `<span class="font-bold" style="color: ${players[playerIndex].color};">${players[playerIndex].name}</span> <svg class="w-6 h-6 mx-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg> <span class="font-semibold">${outcomes[outcomeIndex].text}</span>`;
+                resultList.appendChild(resultEl);
+            });
+
+            resultModal.classList.remove('hidden');
+            setTimeout(() => resultModal.classList.add('modal-visible'), 10);
+        }
+
+        function saveResultsToClipboard() {
+            let resultText = "--- 트위스트 사다리 게임 결과 ---\n";
+            paths.forEach((path, playerIndex) => {
+                const lastPoint = path[path.length - 1];
+                const outcomeIndex = ladder.verticals.findIndex(v => Math.abs(v - lastPoint.x) < 0.1);
+                resultText += `${players[playerIndex].name}: ${outcomes[outcomeIndex].text}\n`;
+            });
+
+            const textarea = document.createElement('textarea');
+            textarea.value = resultText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            const originalText = saveResultBtn.textContent;
+            saveResultBtn.textContent = '복사 완료!';
+            saveResultBtn.disabled = true;
+            setTimeout(() => {
+                saveResultBtn.textContent = originalText;
+                saveResultBtn.disabled = false;
+            }, 1500);
+        }
+
+        function triggerDiceEvent() {
+            diceModal.classList.remove('hidden');
+            diceModal.classList.add('flex');
+            diceEventText.textContent = '주사위를 굴립니다...';
+            const roll = Math.floor(Math.random() * 6) + 1;
+            const rotations = { 1: 'rotateY(0deg)', 2: 'rotateY(-90deg)', 3: 'rotateY(-180deg)', 4: 'rotateY(90deg)', 5: 'rotateX(-90deg)', 6: 'rotateX(90deg)' };
+            const randomX = (Math.floor(Math.random() * 8) + 4) * 360;
+            const randomY = (Math.floor(Math.random() * 8) + 4) * 360;
+            diceElement.style.transform = `rotateX(${randomX}deg) rotateY(${randomY}deg)`;
+            setTimeout(() => {
+                diceElement.style.transform = rotations[roll];
+                appContainer.classList.add('shake');
+                setTimeout(() => handleDiceResult(roll), 1000);
+            }, 1500);
+        }
+
+        function handleDiceResult(roll) {
+            const eventDescriptions = ['사다리 일부 제거!', '사다리 일부 추가!', '플레이어 순서 뒤섞기!', '보상 위치 뒤섞기!', '처음부터 다시 시작!', '변화 없음! 그대로 진행!'];
+            diceEventText.textContent = eventDescriptions[roll - 1];
+
+            setTimeout(() => {
+                const progress = pauseTime / ANIMATION_DURATION;
+
+                const handleEventAnimation = (duration) => {
+                    const eventStart = Date.now();
+                    function animateEvent() {
+                        const elapsed = Date.now() - eventStart;
+                        if (elapsed < duration) {
+                            drawFrame(progress);
+                            requestAnimationFrame(animateEvent);
+                        } else {
+                            highlightedRungs = [];
+                            calculateAllPaths();
+                            resumeAnimation();
+                        }
+                    }
+                    animateEvent();
+                };
+
+                let totalY = 0;
+                paths.forEach(path => {
+                    let len = 0; for (let j = 1; j < path.length; j++) len += Math.hypot(path[j].x - path[j - 1].x, path[j].y - path[j - 1].y);
+                    let curLen = len * progress, drawnLen = 0;
+                    for (let j = 1; j < path.length; j++) {
+                        const p1 = path[j - 1], p2 = path[j], segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                        if (drawnLen + segLen >= curLen) {
+                            const ratio = (curLen - drawnLen) / segLen;
+                            totalY += p1.y + (p2.y - p1.y) * ratio; break;
+                        } drawnLen += segLen;
+                    }
+                });
+                const currentAvgY = totalY / paths.length;
+
+                switch (roll) {
+                    case 1: {
+                        const numToRemove = Math.floor(Math.random() * 2) + 1;
+                        const futureRungs = ladder.rungs.filter(r => r.y > currentAvgY);
+                        for (let i = 0; i < numToRemove && futureRungs.length > 0; i++) {
+                            const rungToRemove = futureRungs.splice(Math.floor(Math.random() * futureRungs.length), 1)[0];
+                            const indexInLadder = ladder.rungs.indexOf(rungToRemove);
+                            if (indexInLadder > -1) {
+                                highlightedRungs.push({ ...ladder.rungs[indexInLadder], type: 'remove', timestamp: Date.now() });
+                                ladder.rungs.splice(indexInLadder, 1);
+                            }
+                        }
+                        handleEventAnimation(1000);
+                        break;
+                    }
+                    case 2: {
+                        const numToAdd = Math.floor(Math.random() * 3) + 2;
+                        for (let i = 0; i < numToAdd; i++) {
+                            let startCol = Math.floor(Math.random() * (playerCount - 1));
+                            let y = currentAvgY + (Math.random() * (canvas.height - currentAvgY) * 0.9);
+                            const yOffset = (Math.random() - 0.5) * 40;
+                            const newRung = { startCol, y, yOffset, type: 'add', timestamp: Date.now() };
+                            ladder.rungs.push(newRung);
+                            highlightedRungs.push(newRung);
+                        }
+                        handleEventAnimation(1000);
+                        break;
+                    }
+                    case 3:
+                        shuffle(players);
+                        displayPlayersAndOutcomes(true);
+                        handleEventAnimation(700);
+                        break;
+                    case 4:
+                        shuffle(outcomes);
+                        displayPlayersAndOutcomes(true);
+                        handleEventAnimation(700);
+                        break;
+                    case 5:
+                        appContainer.classList.remove('shake');
+                        diceModal.classList.add('hidden');
+                        diceModal.classList.remove('flex');
+                        pauseTime = 0;
+                        runGame();
+                        return;
+                    case 6:
+                        resumeAnimation();
+                        break;
+                }
+
+                appContainer.classList.remove('shake');
+                diceModal.classList.add('hidden');
+                diceModal.classList.remove('flex');
+
+            }, 2000);
+        }
+
+        function restartGame() {
+            playerCount = 0;
+            players = []; outcomes = [];
+            ladder = { verticals: [], rungs: [] };
+            paths = []; highlightedRungs = [];
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+            pauseTime = 0;
+            diceEventTriggered = false;
+
+            resultModal.classList.remove('modal-visible');
+            setTimeout(() => {
+                resultModal.classList.add('hidden');
+                gameScreen.classList.add('hidden');
+                setupScreen.classList.remove('hidden');
+                setupScreen.classList.remove('opacity-0');
+            }, 200);
+
+            inputsContainer.innerHTML = '';
+            startGameBtn.disabled = true;
+            Array.from(playerCountSelector.children).forEach(btn => {
+                btn.classList.remove('bg-indigo-500', 'text-white', 'border-indigo-500');
+            });
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
