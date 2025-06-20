@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>트위스트 사다리 게임</title>
+    <title>뒤죽박죽 사다리 타기</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -114,7 +114,7 @@
 
         <!-- 설정 화면 -->
         <div id="setup-screen" class="bg-white p-6 md:p-8 rounded-2xl shadow-xl transition-opacity duration-500">
-            <h1 class="text-3xl md:text-4xl font-bold text-center mb-6">🎲 트위스트 사다리 게임</h1>
+            <h1 class="text-3xl md:text-4xl font-bold text-center mb-6">🎲 뒤죽박죽 사다리 타기</h1>
             <div class="mb-6">
                 <label for="player-count" class="block text-lg font-medium mb-2 text-center">참가 인원을 선택하세요</label>
                 <div id="player-count-selector" class="flex justify-center space-x-2">
@@ -191,6 +191,31 @@
             </div>
         </div>
 
+        <!-- 달력 모달 -->
+        <div id="calendar-modal"
+            class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div class="modal-content bg-white p-4 rounded-2xl shadow-xl w-full max-w-xs">
+                <div id="calendar-header" class="flex items-center justify-between mb-2">
+                    <button id="prev-month-btn" class="p-2 rounded-full hover:bg-gray-200 focus:outline-none">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7">
+                            </path>
+                        </svg>
+                    </button>
+                    <h3 id="month-year-text" class="font-bold text-lg"></h3>
+                    <button id="next-month-btn" class="p-2 rounded-full hover:bg-gray-200 focus:outline-none">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm">
+                    <!-- Day names (Sun, Mon, ...) and dates will be generated here -->
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -217,12 +242,19 @@
         const confirmStartBtn = document.getElementById('confirm-start-btn');
         const cancelStartBtn = document.getElementById('cancel-start-btn');
 
+        // 달력 관련 요소
+        const calendarModal = document.getElementById('calendar-modal');
+        const monthYearText = document.getElementById('month-year-text');
+        const calendarGrid = document.getElementById('calendar-grid');
+        const prevMonthBtn = document.getElementById('prev-month-btn');
+        const nextMonthBtn = document.getElementById('next-month-btn');
+
         const MIN_PLAYERS = 2;
         const MAX_PLAYERS = 6;
         const LADDER_COLORS = ['#E53935', '#1E88E5', '#43A047', '#FDD835', '#8E24AA', '#FB8C00'];
         const ANIMATION_DURATION = 5000;
 
-        const defaultPlayers = ["탐조가", "쩝쩝박사", "만물박사", "파티플래너", "소설가", "애쓰는약골"];
+        const defaultPlayers = ["경호", "다빈", "미선", "세나", "현상", "혜령"];
         const defaultOutcomes = ["휴가 1일", "10만원", "펍키 식사권", "카페 음료권", "크래프톤웨이", "꽝"];
 
         let playerCount = 0;
@@ -237,6 +269,9 @@
         let pauseTime = 0;
         let diceEventTriggered = false;
 
+        let currentCalendarDate = new Date();
+        let activeCalendarInput = null;
+
         // --- 초기화 및 이벤트 리스너 ---
         function init() {
             createPlayerCountButtons();
@@ -245,10 +280,20 @@
             restartFromModalBtn.addEventListener('click', restartGame);
             saveResultBtn.addEventListener('click', saveResultsToClipboard);
             confirmStartBtn.addEventListener('click', () => startGame(true));
-            cancelStartBtn.addEventListener('click', () => {
-                confirmationModal.classList.add('hidden');
-                confirmationModal.classList.remove('modal-visible');
+            cancelStartBtn.addEventListener('click', closeConfirmationModal);
+
+            // 달력 이벤트 리스너
+            inputsContainer.addEventListener('click', handleCalendarIconClick);
+            calendarModal.addEventListener('click', (e) => { if (e.target === calendarModal) closeCalendar(); });
+            prevMonthBtn.addEventListener('click', () => {
+                currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+                renderCalendar();
             });
+            nextMonthBtn.addEventListener('click', () => {
+                currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+                renderCalendar();
+            });
+
             window.addEventListener('resize', () => {
                 if (!gameScreen.classList.contains('hidden')) {
                     resizeCanvas();
@@ -302,11 +347,22 @@
                 nameInput.placeholder = defaultPlayers[i % defaultPlayers.length];
                 nameInput.className = 'player-name w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-400 outline-none mb-2';
                 namesDiv.appendChild(nameInput);
+
+                const outcomeWrapper = document.createElement('div');
+                outcomeWrapper.className = 'relative flex items-center mb-2';
                 const outcomeInput = document.createElement('input');
                 outcomeInput.type = 'text';
                 outcomeInput.placeholder = defaultOutcomes[i % defaultOutcomes.length];
-                outcomeInput.className = 'outcome-value w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-400 outline-none mb-2';
-                outcomesDiv.appendChild(outcomeInput);
+                outcomeInput.className = 'outcome-value w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-400 outline-none pr-10';
+                outcomeWrapper.appendChild(outcomeInput);
+
+                const calendarIcon = document.createElement('button');
+                calendarIcon.type = 'button';
+                calendarIcon.className = 'calendar-icon absolute right-0 p-2 text-gray-400 hover:text-indigo-600';
+                calendarIcon.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>`;
+                outcomeWrapper.appendChild(calendarIcon);
+
+                outcomesDiv.appendChild(outcomeWrapper);
             }
             container.appendChild(namesDiv);
             container.appendChild(outcomesDiv);
@@ -366,8 +422,7 @@
                 return;
             }
 
-            confirmationModal.classList.add('hidden');
-            confirmationModal.classList.remove('modal-visible');
+            closeConfirmationModal();
 
             players = nameInputs.map((input, i) => ({
                 id: `p${i}`,
@@ -420,23 +475,17 @@
 
         function calculateAllPaths() {
             let playerPositions = Array.from({ length: playerCount }, (_, i) => i);
-
-            let tempPaths = Array.from({ length: playerCount }, (_, i) => {
-                return [{ x: ladder.verticals[i], y: 0 }];
-            });
-
+            let tempPaths = Array.from({ length: playerCount }, (_, i) => ([{ x: ladder.verticals[i], y: 0 }]));
             const sortedRungs = [...ladder.rungs].sort((a, b) => a.y - b.y);
 
             sortedRungs.forEach(rung => {
                 const col1 = rung.startCol;
                 const col2 = col1 + 1;
-
                 const player1_index = playerPositions[col1];
                 const player2_index = playerPositions[col2];
 
                 tempPaths[player1_index].push({ x: ladder.verticals[col1], y: rung.y });
                 tempPaths[player2_index].push({ x: ladder.verticals[col2], y: rung.y + rung.yOffset });
-
                 tempPaths[player1_index].push({ x: ladder.verticals[col2], y: rung.y + rung.yOffset });
                 tempPaths[player2_index].push({ x: ladder.verticals[col1], y: rung.y });
 
@@ -450,7 +499,6 @@
                     tempPaths[final_player_index].push({ x: ladder.verticals[i], y: canvas.height });
                 }
             }
-
             paths = tempPaths;
         }
 
@@ -586,6 +634,18 @@
         }
 
         // --- 결과 및 이벤트 처리 ---
+        function parseDateString(dateStr) {
+            const monthNames = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+            const parts = dateStr.split(' ');
+            if (parts.length === 2 && monthNames.includes(parts[0])) {
+                const month = monthNames.indexOf(parts[0]);
+                const day = parseInt(parts[1], 10);
+                const year = new Date().getFullYear();
+                if (!isNaN(day)) return new Date(year, month, day);
+            }
+            return null;
+        }
+
         function displayFinalResults() {
             resultList.innerHTML = '';
 
@@ -593,9 +653,15 @@
                 const lastPoint = path[path.length - 1];
                 const outcomeIndex = ladder.verticals.findIndex(v => Math.abs(v - lastPoint.x) < 0.1);
 
+                let outcomeText = outcomes[outcomeIndex].text;
+                const parsedDate = parseDateString(outcomeText);
+                if (parsedDate) {
+                    outcomeText = `${parsedDate.getMonth() + 1}월 ${parsedDate.getDate()}일`;
+                }
+
                 const resultEl = document.createElement('div');
                 resultEl.className = 'flex items-center justify-between text-lg p-2 rounded-lg bg-gray-50';
-                resultEl.innerHTML = `<span class="font-bold" style="color: ${players[playerIndex].color};">${players[playerIndex].name}</span> <svg class="w-6 h-6 mx-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg> <span class="font-semibold">${outcomes[outcomeIndex].text}</span>`;
+                resultEl.innerHTML = `<span class="font-bold" style="color: ${players[playerIndex].color};">${players[playerIndex].name}</span> <svg class="w-6 h-6 mx-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg> <span class="font-semibold">${outcomeText}</span>`;
                 resultList.appendChild(resultEl);
             });
 
@@ -604,11 +670,32 @@
         }
 
         function saveResultsToClipboard() {
-            let resultText = "--- 트위스트 사다리 게임 결과 ---\n";
+            let resultsForSorting = [];
             paths.forEach((path, playerIndex) => {
                 const lastPoint = path[path.length - 1];
                 const outcomeIndex = ladder.verticals.findIndex(v => Math.abs(v - lastPoint.x) < 0.1);
-                resultText += `${players[playerIndex].name}: ${outcomes[outcomeIndex].text}\n`;
+                const outcomeText = outcomes[outcomeIndex].text;
+                resultsForSorting.push({
+                    playerName: players[playerIndex].name,
+                    outcomeText: outcomeText,
+                    date: parseDateString(outcomeText)
+                });
+            });
+
+            resultsForSorting.sort((a, b) => {
+                if (a.date && b.date) return a.date - b.date;
+                if (a.date) return -1;
+                if (b.date) return 1;
+                return 0;
+            });
+
+            let resultText = "--- 사다리 게임 결과 ---\n";
+            resultsForSorting.forEach(result => {
+                if (result.date) {
+                    resultText += `${result.date.getMonth() + 1}월 ${result.date.getDate()}일: ${result.playerName}\n`;
+                } else {
+                    resultText += `${result.playerName}: ${result.outcomeText}\n`;
+                }
             });
 
             const textarea = document.createElement('textarea');
@@ -649,7 +736,6 @@
 
             setTimeout(() => {
                 const progress = pauseTime / ANIMATION_DURATION;
-
                 const handleEventAnimation = (duration) => {
                     const eventStart = Date.now();
                     function animateEvent() {
@@ -737,6 +823,11 @@
             }, 2000);
         }
 
+        function closeConfirmationModal() {
+            confirmationModal.classList.add('hidden');
+            confirmationModal.classList.remove('modal-visible');
+        }
+
         function restartGame() {
             playerCount = 0;
             players = []; outcomes = [];
@@ -761,6 +852,69 @@
                 btn.classList.remove('bg-indigo-500', 'text-white', 'border-indigo-500');
             });
         }
+
+        // --- 달력 관련 함수 ---
+        function handleCalendarIconClick(e) {
+            const icon = e.target.closest('.calendar-icon');
+            if (icon) {
+                activeCalendarInput = icon.previousElementSibling;
+                openCalendar();
+            }
+        }
+
+        function openCalendar() {
+            currentCalendarDate = new Date();
+            renderCalendar();
+            calendarModal.classList.remove('hidden');
+            setTimeout(() => calendarModal.classList.add('modal-visible'), 10);
+        }
+
+        function closeCalendar() {
+            calendarModal.classList.remove('modal-visible');
+            setTimeout(() => calendarModal.classList.add('hidden'), 200);
+        }
+
+        function renderCalendar() {
+            calendarGrid.innerHTML = '';
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+            const monthNames = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+
+            monthYearText.textContent = `${monthNames[month]} ${year}`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            dayNames.forEach(day => {
+                const dayEl = document.createElement('div');
+                dayEl.textContent = day;
+                dayEl.className = 'font-bold text-gray-500';
+                calendarGrid.appendChild(dayEl);
+            });
+
+            for (let i = 0; i < firstDay; i++) {
+                calendarGrid.appendChild(document.createElement('div'));
+            }
+
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dayEl = document.createElement('button');
+                dayEl.textContent = i;
+                dayEl.className = 'p-1 rounded-full hover:bg-indigo-100 transition-colors';
+                const today = new Date();
+                if (year === today.getFullYear() && month === today.getMonth() && i === today.getDate()) {
+                    dayEl.classList.add('bg-indigo-500', 'text-white', 'hover:bg-indigo-600');
+                }
+                dayEl.onclick = () => {
+                    if (activeCalendarInput) {
+                        activeCalendarInput.value = `${monthNames[month]} ${i}일`;
+                    }
+                    closeCalendar();
+                };
+                calendarGrid.appendChild(dayEl);
+            }
+        }
+
 
         init();
     </script>
